@@ -1,11 +1,6 @@
 import json
 import pandas as pd
 
-# import dash
-# import dash_core_components as dcc
-# import dash_html_components as html
-# import dateutil.parser
-
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -17,6 +12,29 @@ def main():
     # print(json_data)
     df = pd.json_normalize(json_data)
     # print(df)
+
+    df.drop(
+        [
+            "uuid",
+            "used_version",
+            "user.uuid",
+            "user.email",
+            "client.app_name",
+            "client.app_version",
+            "client.platform_name",
+            "client.platform_version",
+            "client.os_version",
+            "location.latitude",
+            "location.longitude",
+        ],
+        axis=1,
+        inplace=True,
+    )
+
+    df.to_csv("item_usages_new.csv")
+    # print(df)
+
+    # uncomment when a new csv is needed to review
     df.to_csv("item_usages.csv")
 
     actions = df["action"].value_counts()
@@ -24,11 +42,23 @@ def main():
     user_name = df["user.name"].value_counts()
     vault_uuid = df["vault_uuid"].value_counts()
 
+    reveal_action = df.loc[df["action"] == "reveal"]
+
     top_vault_by_user = (
         df.groupby(["user.name", "vault_uuid"])
         .vault_uuid.value_counts()
         .nlargest(10)
     )
+
+    crosstab_user_vault = pd.crosstab(df["vault_uuid"], df["user.name"])
+
+    crosstab = crosstab_user_vault.loc[(crosstab_user_vault <= 10).any(axis=1)]
+
+    crosstab = crosstab_user_vault.loc[
+        :, (crosstab_user_vault <= 10).any(axis=0)
+    ]
+
+    crosstab.to_csv("crosstab.csv")
 
     top_user_by_vault = (
         df.groupby(["vault_uuid", "user.name"])
@@ -44,117 +74,70 @@ def main():
 
     print("actions")
     print(actions)
-    print(actions.reveal)
-    # print(actions[""]) #for null value
-
-    print()
-    print("operating_systems")
-    print(operating_systems)
-
-    print()
-    print("user_name")
-    print(user_name)
-
-    print()
-    print("vault_uuid")
-    print(vault_uuid)
-
-    print("top_vault_by_user")
-    print(top_vault_by_user)
-    print()
-
-    print("top_user_by_vault")
-    print(top_user_by_vault)
-    print()
-
-    print("top_vault_by_os")
-    print(top_vault_by_os)
-    print()
+    print(actions.index[0])
 
     ## Start common graph setup ##
     fig = make_subplots(
-        rows=3,
-        cols=2,
-        # horizontal_spacing=0.10,
-        # vertical_spacing=0.06,
-        # specs=[
-        # [{"type": "scatter", "colspan": 2}, None],
-        # [{"type": "table", "colspan": 1}, None],
-        # [{"type": "scatter", "colspan": 2}, None],
-        # ],
-        subplot_titles=("Actions", "", ""),
+        rows=2,
+        cols=1,
+        horizontal_spacing=0.9,
+        vertical_spacing=0.1,
+        specs=[[{"type": "scatter"}], [{"type": "table"}]],
+        subplot_titles=("Actions", "Reveal Actions", ""),
     )
-    ## End common graph setup  ##
+    # End common graph setup  ##
+
+    for action in range(len(actions)):
+        fig.add_trace(
+            go.Bar(
+                y=[actions[action]],
+                hovertemplate=(
+                    actions.index[action] + ": %{y}" + "<extra></extra>"
+                ),
+                x=[actions.index[action]],
+            ),
+            row=1,
+            col=1,
+        )
+
+    # print(reveal_action)
 
     fig.add_trace(
-        go.Bar(
-            y=[actions["fill"]],
-            hovertemplate=("fill: %{y}" + "<extra></extra>"),
-            x=["fill"],
+        go.Table(
+            columnwidth=[300, 300, 300, 100, 150, 175, 400, 200, 200, 150],
+            header=dict(
+                values=list(reveal_action.columns),
+                line_color="darkslategray",
+                fill_color="royalblue",
+                align="center",
+                font=dict(color="white", size=16),
+                height=50,
+            ),
+            cells=dict(
+                values=reveal_action.transpose().values.tolist(),
+                line_color="darkslategray",
+                fill=dict(color=["paleturquoise", "white"]),
+                align="center",
+                font_size=14,
+                height=40,
+                # width=100,
+            ),
         ),
-        row=1,
+        row=2,
         col=1,
     )
 
-    fig.add_trace(
-        go.Bar(
-            y=[actions["server-fetch"]],
-            hovertemplate=("server-fetch: %{y}" + "<extra></extra>"),
-            x=["server-fetch"],
-        ),
-        row=1,
-        col=1,
-    )
+    # fig.add_trace(reveal_action_table, row=2, col=1)
 
-    fig.add_trace(
-        go.Bar(
-            y=[actions[""]],
-            hovertemplate=("null: %{y}" + "<extra></extra>"),
-            x=["null"],
-        ),
-        row=1,
-        col=1,
-    )
-
-    fig.add_trace(
-        go.Bar(
-            y=[actions["secure-copy"]],
-            hovertemplate=("secure-copy: %{y}" + "<extra></extra>"),
-            x=["secure-copy"],
-        ),
-        row=1,
-        col=1,
-    )
-
-    fig.add_trace(
-        go.Bar(
-            y=[actions["server-update"]],
-            hovertemplate=("server-update: %{y}" + "<extra></extra>"),
-            x=["secure-update"],
-        ),
-        row=1,
-        col=1,
-    )
-
-    fig.add_trace(
-        go.Bar(
-            y=[actions["server-create"]],
-            hovertemplate=("server-create: %{y}" + "<extra></extra>"),
-            x=["secure-create"],
-        ),
-        row=1,
-        col=1,
-    )
-
-    fig.add_trace(
-        go.Bar(
-            y=[actions["reveal"]],
-            hovertemplate=("server-reveal: %{y}" + "<extra></extra>"),
-            x=["secure-reveal"],
-        ),
-        row=1,
-        col=1,
-    )
+    # fig = go.Figure(
+    # data=[
+    # go.Table(
+    # header=dict(values=list(reveal_action.columns)),
+    # cells=dict(values=reveal_action.transpose().values.tolist()),
+    # )
+    # ]
+    # )
+    fig.update_layout(autosize=True)
 
     fig.show()
 
