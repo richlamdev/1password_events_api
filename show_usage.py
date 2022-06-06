@@ -11,7 +11,9 @@ def main():
         json_data = json.load(input_file)
     # print(json_data)
     df = pd.json_normalize(json_data)
-    # print(df)
+
+    # uncomment when a new csv is needed to review
+    df.to_csv("item_usages_full.csv")
 
     df.drop(
         [
@@ -31,65 +33,50 @@ def main():
         inplace=True,
     )
 
-    df.to_csv("item_usages_new.csv")
+    # uncomment when a new csv is needed to review
+    df.to_csv("item_usages_modified.csv")
     # print(df)
 
-    # uncomment when a new csv is needed to review
-    df.to_csv("item_usages.csv")
+    # replace blank cells in action column with "null"
+    df["action"].replace({"": "null"}, inplace=True)
 
     actions = df["action"].value_counts()
-    operating_systems = df["client.os_name"].value_counts()
-    user_name = df["user.name"].value_counts()
-    vault_uuid = df["vault_uuid"].value_counts()
-
     reveal_action = df.loc[df["action"] == "reveal"]
 
-    top_vault_by_user = (
-        df.groupby(["user.name", "vault_uuid"])
-        .vault_uuid.value_counts()
-        .nlargest(10)
-    )
+    linux = df.loc[df["client.os_name"] == "Linux"]
 
-    crosstab_user_vault = pd.crosstab(df["vault_uuid"], df["user.name"])
-
-    crosstab = crosstab_user_vault.loc[(crosstab_user_vault <= 10).any(axis=1)]
-
-    crosstab = crosstab_user_vault.loc[
-        :, (crosstab_user_vault <= 10).any(axis=0)
-    ]
-
-    crosstab.to_csv("crosstab.csv")
-
-    top_user_by_vault = (
-        df.groupby(["vault_uuid", "user.name"])
-        .vault_uuid.value_counts()
-        .nlargest(10)
-    )
-
-    top_vault_by_os = (
-        df.groupby(["client.os_name", "vault_uuid"])
-        .vault_uuid.value_counts()
-        .nlargest(10)
-    )
-
-    print("actions")
-    print(actions)
-    print(actions.index[0])
+    # print("actions")
+    # print(actions)
+    # print(actions.index[0])
 
     ## Start common graph setup ##
     fig = make_subplots(
-        rows=2,
+        rows=4,
         cols=1,
-        horizontal_spacing=0.9,
+        horizontal_spacing=0.5,
         vertical_spacing=0.1,
-        specs=[[{"type": "scatter"}], [{"type": "table"}]],
-        subplot_titles=("Actions", "Reveal Actions", ""),
+        specs=[
+            [{"type": "bar"}],
+            [{"type": "table"}],
+            [{"type": "table"}],
+            [{"type": "table"}],
+        ],
+        subplot_titles=(
+            "Actions",
+            "Reveal Actions",
+            "Non-Windows/MacOS/Android OS",
+            "Top Item Usage",
+        ),
     )
+
+    # adjust title font size
+    fig.update_annotations(font_size=30)
     # End common graph setup  ##
 
     for action in range(len(actions)):
         fig.add_trace(
             go.Bar(
+                name=actions.index[action],
                 y=[actions[action]],
                 hovertemplate=(
                     actions.index[action] + ": %{y}" + "<extra></extra>"
@@ -100,11 +87,19 @@ def main():
             col=1,
         )
 
-    # print(reveal_action)
+    fig.update_layout(
+        yaxis=dict(
+            title="Number of actions", titlefont_size=16, tickfont_size=14
+        ),
+        xaxis_tickfont_size=14,
+        legend=dict(
+            bgcolor="rgba(255,255,255,0)", bordercolor="rgba(255,255,255,0)"
+        ),
+    )
 
     fig.add_trace(
         go.Table(
-            columnwidth=[300, 300, 300, 100, 150, 175, 400, 200, 200, 150],
+            columnwidth=[400, 400, 300, 100, 150, 175, 400, 200, 200, 150],
             header=dict(
                 values=list(reveal_action.columns),
                 line_color="darkslategray",
@@ -120,24 +115,83 @@ def main():
                 align="center",
                 font_size=14,
                 height=40,
-                # width=100,
             ),
         ),
         row=2,
         col=1,
     )
 
-    # fig.add_trace(reveal_action_table, row=2, col=1)
+    fig.add_trace(
+        go.Table(
+            columnwidth=[400, 400, 300, 100, 150, 175, 400, 200, 200, 150],
+            header=dict(
+                values=list(linux.columns),
+                line_color="darkslategray",
+                fill_color="royalblue",
+                align="center",
+                font=dict(color="white", size=16),
+                height=50,
+            ),
+            cells=dict(
+                values=linux.transpose().values.tolist(),
+                line_color="darkslategray",
+                fill=dict(color=["paleturquoise", "white"]),
+                align="center",
+                font_size=14,
+                height=40,
+            ),
+        ),
+        row=3,
+        col=1,
+    )
 
-    # fig = go.Figure(
-    # data=[
-    # go.Table(
-    # header=dict(values=list(reveal_action.columns)),
-    # cells=dict(values=reveal_action.transpose().values.tolist()),
-    # )
-    # ]
-    # )
-    fig.update_layout(autosize=True)
+    top_item_by_user = (
+        df.groupby(["item_uuid", "user.name"])
+        .size()
+        .nlargest(15)
+        .reset_index(name="count")
+    )
+
+    print()
+    print()
+    print("top_item_by_user")
+    print(top_item_by_user)
+    print()
+
+    item_df = pd.DataFrame(top_item_by_user)
+    print()
+    print()
+    print(item_df)
+    # top_item_by_user.to_csv("top_item_by_user.csv")
+
+    item_df.to_csv("item_df.csv")
+
+    fig.add_trace(
+        go.Table(
+            columnwidth=[400, 400, 300],
+            header=dict(
+                values=list(item_df.columns),
+                # values=["item", "test", "test"],
+                line_color="darkslategray",
+                fill_color="royalblue",
+                align="center",
+                font=dict(color="white", size=16),
+                height=50,
+            ),
+            cells=dict(
+                values=item_df.transpose().values.tolist(),
+                line_color="darkslategray",
+                fill=dict(color=["paleturquoise", "white"]),
+                align="center",
+                font_size=14,
+                height=40,
+            ),
+        ),
+        row=4,
+        col=1,
+    )
+
+    fig.update_layout(autosize=True, height=2500, showlegend=True)
 
     fig.show()
 
