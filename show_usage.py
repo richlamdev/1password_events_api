@@ -10,10 +10,11 @@ def main():
     with open("item_usages.json", "r") as input_file:
         json_data = json.load(input_file)
     # print(json_data)
-    df = pd.json_normalize(json_data)
 
-    # uncomment when a new csv is needed to review
-    df.to_csv("item_usages_full.csv")
+    # flatten the json data
+    df = pd.json_normalize(json_data)
+    # uncomment to generate a new csv, if needed to review via excel
+    # df.to_csv("item_usages_full.csv")
 
     df.drop(
         [
@@ -34,7 +35,7 @@ def main():
     )
 
     # uncomment when a new csv is needed to review
-    df.to_csv("item_usages_modified.csv")
+    # df.to_csv("item_usages_modified.csv")
     # print(df)
 
     # replace blank cells in action column with "null"
@@ -42,21 +43,52 @@ def main():
 
     actions = df["action"].value_counts()
     reveal_action = df.loc[df["action"] == "reveal"]
-
-    linux = df.loc[df["client.os_name"] == "Linux"]
-
     # print("actions")
     # print(actions)
     # print(actions.index[0])
 
+    linux = df.loc[df["client.os_name"] == "Linux"]
+
+    top_item_by_user = (
+        df.groupby(["item_uuid", "user.name"])
+        .size()
+        .nlargest(15)
+        .reset_index(name="count")
+    )
+    # convert pandas series to dataframe to easily display in a Table
+    top_item_by_user = pd.DataFrame(top_item_by_user)
+    # write to file to view with excel
+    # top_item_by_user.to_csv("top_item_by_user.csv")
+
+    windows = df.loc[df["client.os_name"] == "Windows"]
+
+    windows_users_groupby_vault = (
+        windows.groupby(["vault_uuid", "user.name"])
+        .size()
+        # .nlargest(15)
+        .reset_index(name="count")
+        .sort_values(["count"], ascending=False)
+        .drop_duplicates(subset=["vault_uuid"])
+        # .tail(75)
+        # .head(30)
+    )
+
+    print()
+    print("windows_user_groupby_vault:")
+    print(windows_users_groupby_vault)
+    print()
+
+    # windows_users_groupby_vault.to_csv("windows_users_vault.csv")
+
     ## Start common graph setup ##
     fig = make_subplots(
-        rows=4,
+        rows=5,
         cols=1,
         horizontal_spacing=0.5,
         vertical_spacing=0.1,
         specs=[
             [{"type": "bar"}],
+            [{"type": "table"}],
             [{"type": "table"}],
             [{"type": "table"}],
             [{"type": "table"}],
@@ -66,11 +98,12 @@ def main():
             "Reveal Actions",
             "Non-Windows/MacOS/Android OS",
             "Top Item Usage",
+            "Top Vault Usage - Windows only",
         ),
     )
 
     # adjust title font size
-    fig.update_annotations(font_size=30)
+    fig.update_annotations(font_size=20)
     # End common graph setup  ##
 
     for action in range(len(actions)):
@@ -145,32 +178,11 @@ def main():
         col=1,
     )
 
-    top_item_by_user = (
-        df.groupby(["item_uuid", "user.name"])
-        .size()
-        .nlargest(15)
-        .reset_index(name="count")
-    )
-
-    print()
-    print()
-    print("top_item_by_user")
-    print(top_item_by_user)
-    print()
-
-    item_df = pd.DataFrame(top_item_by_user)
-    print()
-    print()
-    print(item_df)
-    # top_item_by_user.to_csv("top_item_by_user.csv")
-
-    item_df.to_csv("item_df.csv")
-
     fig.add_trace(
         go.Table(
             columnwidth=[400, 400, 300],
             header=dict(
-                values=list(item_df.columns),
+                values=list(top_item_by_user.columns),
                 # values=["item", "test", "test"],
                 line_color="darkslategray",
                 fill_color="royalblue",
@@ -179,7 +191,7 @@ def main():
                 height=50,
             ),
             cells=dict(
-                values=item_df.transpose().values.tolist(),
+                values=top_item_by_user.transpose().values.tolist(),
                 line_color="darkslategray",
                 fill=dict(color=["paleturquoise", "white"]),
                 align="center",
@@ -191,6 +203,32 @@ def main():
         col=1,
     )
 
+    fig.add_trace(
+        go.Table(
+            columnwidth=[400, 400, 300],
+            header=dict(
+                values=list(windows_users_groupby_vault.columns),
+                # values=["item", "test", "test"],
+                line_color="darkslategray",
+                fill_color="royalblue",
+                align="center",
+                font=dict(color="white", size=16),
+                height=50,
+            ),
+            cells=dict(
+                values=windows_users_groupby_vault.transpose().values.tolist(),
+                line_color="darkslategray",
+                fill=dict(color=["paleturquoise", "white"]),
+                align="center",
+                font_size=14,
+                height=40,
+            ),
+        ),
+        row=5,
+        col=1,
+    )
+
+    # windows_users_groupby_vault
     fig.update_layout(autosize=True, height=2500, showlegend=True)
 
     fig.show()
